@@ -1,0 +1,38 @@
+services:
+  backup-service:
+    build: .
+    container_name: pg-backup-scheduler
+    restart: unless-stopped
+    
+    env_file:
+      - .env
+    environment:
+      # Backup Configuration
+      - RETENTION_DAYS=${RETENTION_DAYS:-30}
+      
+      # Scheduling
+      - BACKUP_CRON=${BACKUP_CRON:-30 0 * * *}
+      - TZ=${TZ:-Europe/Berlin}
+      
+      # Storage
+      - LOCAL_BACKUP_DIR=${LOCAL_BACKUP_DIR:-/data/backups}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      
+      # Service
+      - SERVICE_PORT=8080
+    
+    volumes:
+      # Mount backup directory
+      - ./backups:/data/backups
+      # Mount Docker socket for Docker-based backups
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
