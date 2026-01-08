@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/docker/docker/api/types/container"
+)
+
+const (
+	dbConnectionTimeout = 30 * time.Second
 )
 
 type BackupRunner struct {
@@ -153,11 +158,14 @@ func (br *BackupRunner) CreateBackup(ctx context.Context, db *database.Database,
 }
 
 func (br *BackupRunner) detectVersion(ctx context.Context, connURL string) (string, error) {
-	conn, err := pgx.Connect(ctx, connURL)
+	connCtx, cancel := context.WithTimeout(ctx, dbConnectionTimeout)
+	defer cancel()
+
+	conn, err := pgx.Connect(connCtx, connURL)
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close(ctx)
+	defer conn.Close(context.Background())
 
 	var version string
 	err = conn.QueryRow(ctx, "SELECT version()").Scan(&version)
@@ -188,11 +196,14 @@ type Metrics struct {
 }
 
 func (br *BackupRunner) collectMetrics(ctx context.Context, connURL string) (*Metrics, error) {
-	conn, err := pgx.Connect(ctx, connURL)
+	connCtx, cancel := context.WithTimeout(ctx, dbConnectionTimeout)
+	defer cancel()
+
+	conn, err := pgx.Connect(connCtx, connURL)
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close(ctx)
+	defer conn.Close(context.Background())
 
 	metrics := &Metrics{}
 
@@ -216,12 +227,6 @@ func (br *BackupRunner) collectMetrics(ctx context.Context, connURL string) (*Me
 }
 
 func (br *BackupRunner) dumpRoles(ctx context.Context, connURL, outputFile string, pgVersion string) error {
-	conn, err := pgx.Connect(ctx, connURL)
-	if err != nil {
-		return err
-	}
-	defer conn.Close(ctx)
-
 	parsed, err := parseConnectionURL(connURL)
 	if err != nil {
 		return err
@@ -233,10 +238,16 @@ func (br *BackupRunner) dumpRoles(ctx context.Context, connURL, outputFile strin
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
+	// On macOS, Docker containers need host.docker.internal to reach host services
+	host := parsed.host
+	if runtime.GOOS == "darwin" && (host == "localhost" || host == "127.0.0.1") {
+		host = "host.docker.internal"
+	}
+
 	// Run pg_dumpall and capture stdout (no file redirect, no bind mount needed)
 	cmd := []string{"pg_dumpall", "--roles-only"}
 	env := []string{
-		fmt.Sprintf("PGHOST=%s", parsed.host),
+		fmt.Sprintf("PGHOST=%s", host),
 		fmt.Sprintf("PGPORT=%d", parsed.port),
 		fmt.Sprintf("PGUSER=%s", parsed.user),
 		fmt.Sprintf("PGPASSWORD=%s", parsed.password),
@@ -293,12 +304,6 @@ func (br *BackupRunner) dumpData(ctx context.Context, connURL, outputFile string
 }
 
 func (br *BackupRunner) runPgDump(ctx context.Context, connURL, outputFile string, pgVersion string, options []string) error {
-	conn, err := pgx.Connect(ctx, connURL)
-	if err != nil {
-		return err
-	}
-	defer conn.Close(ctx)
-
 	parsed, err := parseConnectionURL(connURL)
 	if err != nil {
 		return err
@@ -310,8 +315,14 @@ func (br *BackupRunner) runPgDump(ctx context.Context, connURL, outputFile strin
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
+	// On macOS, Docker containers need host.docker.internal to reach host services
+	host := parsed.host
+	if runtime.GOOS == "darwin" && (host == "localhost" || host == "127.0.0.1") {
+		host = "host.docker.internal"
+	}
+
 	pgDumpArgs := []string{"pg_dump",
-		fmt.Sprintf("--host=%s", parsed.host),
+		fmt.Sprintf("--host=%s", host),
 		fmt.Sprintf("--port=%d", parsed.port),
 		fmt.Sprintf("--username=%s", parsed.user),
 		fmt.Sprintf("--dbname=%s", parsed.database),
