@@ -50,6 +50,11 @@ jobs:
       - name: Run unit tests
         run: go test ./... -v -run '^Test[^I]' || true
       
+      - name: Run integration tests
+        env:
+          TEST_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: go test -v -run '^TestIntegration$' -timeout 10m
+      
       - name: Build Docker image
         run: |
           docker build -t pg-backup-scheduler:test .

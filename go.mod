@@ -4,7 +4,6 @@ go 1.24.0
 
 require (
 	github.com/docker/docker v25.0.5+incompatible
-	github.com/go-errors/errors v1.5.1
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/robfig/cron/v3 v3.0.1
 	go.uber.org/zap v1.27.0

@@ -360,32 +360,31 @@ func (s *Service) RunBackupForProject(ctx context.Context, projectID string) (ma
 		return nil, fmt.Errorf("backup failed: %w", err)
 	}
 
-	if manifest.Status == "success" && len(manifest.Files) > 0 {
-		// Move backup files to final location
-		backupDir := filepath.Join(s.baseDir, db.Identifier, backupDate)
-		if err := os.MkdirAll(backupDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create backup directory: %w", err)
+	// Always move manifest to final location (even for failures, so we can see what went wrong)
+	backupDir := filepath.Join(s.baseDir, db.Identifier, backupDate)
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create backup directory: %w", err)
+	}
+
+	manifestFile := fmt.Sprintf("manifest-%s.json", manifest.RunID)
+	srcManifest := filepath.Join(tempDir, manifestFile)
+	dstManifest := filepath.Join(backupDir, manifestFile)
+
+	if _, err := os.Stat(srcManifest); err == nil {
+		if err := os.Rename(srcManifest, dstManifest); err != nil {
+			s.logger.Warn("Failed to move manifest", zap.Error(err))
 		}
+	}
 
-		// Move archive and manifest
+	// Only move archive if backup was successful
+	if manifest.Status == "success" && len(manifest.Files) > 0 {
 		archiveFile := fmt.Sprintf("backup-%s.tar.gz", manifest.RunID)
-		manifestFile := fmt.Sprintf("manifest-%s.json", manifest.RunID)
-
 		srcArchive := filepath.Join(tempDir, archiveFile)
 		dstArchive := filepath.Join(backupDir, archiveFile)
-
-		srcManifest := filepath.Join(tempDir, manifestFile)
-		dstManifest := filepath.Join(backupDir, manifestFile)
 
 		if _, err := os.Stat(srcArchive); err == nil {
 			if err := os.Rename(srcArchive, dstArchive); err != nil {
 				s.logger.Warn("Failed to move archive", zap.Error(err))
-			}
-		}
-
-		if _, err := os.Stat(srcManifest); err == nil {
-			if err := os.Rename(srcManifest, dstManifest); err != nil {
-				s.logger.Warn("Failed to move manifest", zap.Error(err))
 			}
 		}
 	}
