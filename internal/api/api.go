@@ -61,6 +61,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// Handler returns the HTTP handler for testing purposes
+func (s *Server) Handler() http.Handler {
+	return s.httpServer.Handler
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, map[string]interface{}{
 		"status":    "healthy",

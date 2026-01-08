@@ -68,16 +68,21 @@ func makeRequest(apiURL, method, path string) (map[string]interface{}, error) {
 	}
 	defer resp.Body.Close()
 
+	// Read body once
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
 	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if errMsg, ok := result["error"].(string); ok {
 			return nil, fmt.Errorf("HTTP error: %d %s - %s", resp.StatusCode, resp.Status, errMsg)
 		}
-		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("HTTP error: %d %s - %s", resp.StatusCode, resp.Status, string(bodyBytes))
 	}
 

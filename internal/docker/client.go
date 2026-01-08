@@ -10,7 +10,6 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/go-errors/errors"
 )
 
 var cli *client.Client
@@ -124,7 +123,7 @@ func RunOnceWithConfig(ctx context.Context, cfg container.Config, hostConfig con
 			// Sometimes errors go to stdout
 			return fmt.Errorf("container exited with code %d: %s", exitCode, stdoutStr)
 		}
-		return errors.Errorf("container exited with code %d", exitCode)
+		return fmt.Errorf("container exited with code %d", exitCode)
 	}
 	return nil
 }
